@@ -33,7 +33,7 @@ func RegSplit(text string, delimeter string) []string {
 }
 
 type DataStorageManager struct{
-    data []string
+    data chan string
     swm *StopWordManager
     messages chan []string
 }
@@ -43,15 +43,22 @@ func (dsm *DataStorageManager) addMessage(message []string){
 }
 
 func (dsm *DataStorageManager) init(path string) {
+    dsm.data = make(chan string, 200000)
     book, err := ioutil.ReadFile(path)
     if err != nil {
         panic(err)
     }
-    dsm.data = RegSplit(strings.ToLower(string(book)), "[^a-zA-Z]")
+    wordList := RegSplit(strings.ToLower(string(book)), "[^a-zA-Z]")
+    go func() {
+        defer close(dsm.data)
+        for _, w := range wordList{
+            dsm.data <- w
+        }
+    }()
 }
 
 func (dsm *DataStorageManager) processWords() {
-    for _, w := range dsm.data {
+    for w := range dsm.data {
         send(dsm.swm, []string{"filter", w})
     }
     send(dsm.swm, []string{"top25"})
