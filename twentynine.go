@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"strconv"
+	"sync"
+	"time"
 )
 
 func RegSplit(text string, delimeter string) []string {
@@ -23,6 +25,9 @@ func RegSplit(text string, delimeter string) []string {
 }
 
 func main () {
+    var wg sync.WaitGroup
+    var lock = sync.RWMutex{}
+    
     wordSpace := make(chan string, 200000)
     freqSpace := make(chan map[string]int, 100)
     
@@ -66,18 +71,27 @@ func main () {
     
     numWorkers := 5
     for i := 0; i < numWorkers; i++ {
-        go func() {
-            processWords()
-        }()
+        go processWords()
     }
     
     wordFreqs := make(map[string]int)
-    for i := 0; i < numWorkers; i++ {
-        freqs := <-freqSpace
-        for key, value := range freqs {
-            wordFreqs[key] = wordFreqs[key] + value
-        }
+    for j := 0; j < numWorkers; j++ {
+        go func() {
+            freqs := <-freqSpace
+            for key, value := range freqs {
+                lock.RLock()
+                wfval := wordFreqs[key] + value
+                lock.RUnlock()
+                
+                lock.Lock()
+                wordFreqs[key] = wfval
+                lock.Unlock()
+            }
+        }()
     }
+    
+    wg.Wait()
+    time.Sleep(1000 * time.Millisecond)
     
     for i := 0; i < 25; i++ {
         maxKey := ""
